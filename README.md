@@ -8,11 +8,11 @@
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 [Follow on X](https://x.com/emanueledpt)
 
-Control [Codex](https://openai.com/index/codex/) from your iPhone. Remodex is a local-first open-source bridge + iOS app that keeps the Codex runtime on your Mac and lets your phone connect through a paired secure session.
+Control [Codex](https://openai.com/index/codex/) from your iPhone. Remodex is a local-first open-source bridge + iOS app that keeps the Codex runtime on your paired host and lets your phone connect through a paired secure session.
 
 ## Key App Features
 
-- End-to-end encrypted pairing and chats between your iPhone and Mac
+- End-to-end encrypted pairing and chats between your iPhone and paired host
 - Fast mode for lower-latency turns
 - Plan mode for structured planning before execution
 - Subagents from iPhone with the `/subagents` command
@@ -23,14 +23,14 @@ Control [Codex](https://openai.com/index/codex/) from your iPhone. Remodex is a 
 - Reasoning controls to tune how much thinking Codex uses
 - Access controls with On-Request or Full access
 - Photo attachments from camera or library
-- One-time QR bootstrap with trusted Mac reconnects
-- macOS-only background bridge service via `launchd`
-- Live streaming on your phone while Codex runs on your Mac
-- Shared thread history with Codex on your Mac
+- One-time QR bootstrap with trusted bridge reconnects
+- Background bridge service via macOS `launchd` or Linux user `systemd`
+- Live streaming on your phone while Codex runs on your paired host
+- Shared thread history with Codex on your paired host
 
 The repo stays local-first and self-host friendly: the iOS app source does not embed a public hosted endpoint, and the transport layer remains inspectable for anyone who wants to run their own setup.
 
-Today, the background daemon / trusted auto-reconnect flow is implemented for macOS. Self-hosted relay setups still work on other OSes, but they currently use the foreground bridge flow instead of the macOS `launchd` service path.
+Today, the background daemon / trusted auto-reconnect flow is implemented for macOS through `launchd` and for Linux through user `systemd`. Self-hosted relay setups still work on other OSes, but they use the foreground bridge flow unless you set up your own service wrapper.
 
 If you want the public-repo distribution model explained clearly, read [SELF_HOSTING_MODEL.md](SELF_HOSTING_MODEL.md).
 
@@ -50,7 +50,7 @@ If you scan the pairing QR with a generic camera or QR reader before installing 
 
 ```
 ┌──────────────┐       Paired session   ┌───────────────┐       stdin/stdout       ┌─────────────┐
-│  Remodex iOS │ ◄────────────────────► │ remodex (Mac) │ ◄──────────────────────► │ codex       │
+│  Remodex iOS │ ◄────────────────────► │ remodex host  │ ◄──────────────────────► │ codex       │
 │  app         │    WebSocket bridge    │ bridge        │    JSON-RPC              │ app-server  │
 └──────────────┘                        └───────────────┘                          └─────────────┘
                                                │                                         │
@@ -62,12 +62,12 @@ If you scan the pairing QR with a generic camera or QR reader before installing 
                                         └─────────────┘                           └─────────────┘
 ```
 
-1. Run `remodex up` on your Mac
-2. On macOS, Remodex installs/starts a lightweight background bridge service and prints a QR for first-time pairing or recovery
-3. Scan the QR once with the Remodex iOS app to trust that Mac
-4. After the first handshake, the iPhone can resolve the Mac's live session through the configured relay and reconnect automatically
+1. Run `remodex up` on your Mac or Linux host
+2. On macOS or Linux, Remodex installs/starts a lightweight background bridge service and prints a QR for first-time pairing or recovery
+3. Scan the QR once with the Remodex iOS app to trust that host
+4. After the first handshake, the iPhone can resolve the host's live session through the configured relay and reconnect automatically
 5. Your phone sends instructions to Codex through the bridge and receives responses in real-time
-6. The bridge handles git operations and local session persistence on your Mac
+6. The bridge handles git operations and local session persistence on your paired host
 7. `Codex.app` can read the same thread history from disk, but it is not a true live mirror unless you enable the optional refresh workaround
 
 ## Repository Structure
@@ -129,11 +129,11 @@ On first connect, open the Remodex app, follow the onboarding flow, then scan th
 After that first scan:
 
 - the iPhone saves the Mac as a trusted device
-- the Mac bridge keeps its identity locally
+- the host bridge keeps its identity locally
 - the app tries trusted reconnect automatically on later launches
 - the QR remains available as a recovery path if trust changes or the relay cannot resolve the live session
 
-For now, the daemon-backed trusted reconnect path is macOS-only. If you self-host on Linux or Windows, pairing still works, but the bridge runs in the foreground unless you set up your own OS-specific service wrapper.
+For now, the daemon-backed trusted reconnect path is built in for macOS and Linux. If you self-host on Windows or another OS, pairing still works, but the bridge runs in the foreground unless you set up your own OS-specific service wrapper.
 
 ## Run Locally
 
@@ -172,9 +172,9 @@ A common private setup looks like this:
 2. Put that machine on Tailscale
 3. Set `REMODEX_RELAY` to the Tailscale-reachable `ws://` or `wss://` relay URL
 4. Pair once with QR
-5. Let the iPhone reconnect to the same trusted Mac over that relay later
+5. Let the iPhone reconnect to the same trusted host over that relay later
 
-If that relay is fronting a Mac bridge, the macOS daemon can keep the bridge alive for hands-free reconnects. If you self-host against a non-macOS bridge, the same relay path still works, but automatic background service management is not built in yet.
+If that relay is fronting a macOS or Linux bridge, the built-in background service can keep the bridge alive for hands-free reconnects. If you self-host against another OS, the same relay path still works, but you must manage persistence/background service behavior yourself.
 
 Reverse-proxy subpaths work too, so a hosted relay behind Traefik can live under the same domain as other APIs:
 
@@ -223,43 +223,51 @@ REMODEX_RELAY="ws://localhost:9000/relay" npm start
 
 Starts Remodex.
 
-On macOS, `remodex up` is the friendly entrypoint for the background bridge service:
+On macOS and Linux, `remodex up` is the friendly entrypoint for the background bridge service:
 
-- Writes the daemon config used by the `launchd` service
+- Writes the daemon config used by the `launchd` or user `systemd` service
 - Starts or restarts the background bridge service
 - Waits for a pairing payload and prints a QR for first-time trust or recovery
 - Keeps the bridge alive even if you close the terminal later
 
-On non-macOS platforms, `remodex up` runs the bridge in the foreground.
+On other platforms, `remodex up` runs the bridge in the foreground. Use `remodex run` when you explicitly want a foreground bridge on any platform.
+
+On Linux, the built-in service path uses user `systemd` and writes the unit to `~/.config/systemd/user/remodex-bridge.service`. If you need it to survive after all login sessions close on a headless host, enable linger for that user with `loginctl enable-linger "$USER"`.
 
 In both cases the bridge:
 
 - Spawns `codex app-server` (or connects to an existing endpoint)
-- Connects the Mac bridge to the configured relay
+- Connects the local bridge to the configured relay
 - Forwards JSON-RPC messages bidirectionally
 - Handles git commands from the phone
 - Persists the active thread for later resumption
 
 ### `remodex start`
 
-macOS only. Starts the background bridge service without waiting for or printing a QR in the current terminal.
+macOS and Linux only. Starts the background bridge service without waiting for or printing a QR in the current terminal.
 If the service is already loaded, this path refreshes it in place.
 
 ### `remodex restart`
 
-macOS only. Explicitly restarts the background bridge service without waiting for or printing a QR in the current terminal.
+macOS and Linux only. Explicitly restarts the background bridge service without waiting for or printing a QR in the current terminal.
 
 ### `remodex stop`
 
-macOS only. Stops the background bridge service and clears its transient runtime status.
+macOS and Linux only. Stops the background bridge service and clears its transient runtime status.
 
 ### `remodex status`
 
-macOS only. Prints the current `launchd` / bridge status, including whether the service is loaded and whether a recent pairing payload exists.
+macOS and Linux only. Prints the current service / bridge status, including whether the service is loaded and whether a recent pairing payload exists.
+
+On Linux, detailed service logs are also available with:
+
+```sh
+journalctl --user -u remodex-bridge.service
+```
 
 ### `remodex run-service`
 
-macOS only. Internal service entrypoint used by `launchd`. You normally do not run this manually.
+Internal service entrypoint used by `launchd` on macOS and user `systemd` on Linux. You normally do not run this manually.
 
 ### `remodex --version`
 
@@ -340,10 +348,10 @@ On the relay/VPS side, keep push disabled until you actually want it. The HTTP p
 
 ## Pairing and Safety
 
-- Remodex is local-first: Codex, git operations, and workspace actions run on your Mac, while the iPhone acts as a paired remote control.
+- Remodex is local-first: Codex, git operations, and workspace actions run on your paired host, while the iPhone acts as a paired remote control.
 - On iPhone, the most reliable self-host setup is a Tailscale-reachable relay. Plain LAN pairing over `ws://` on the same Wi-Fi can fail on some iOS devices because local-network routing from the app is not always reliable.
-- The pairing QR carries the connection URL, the session ID, and the bridge identity key used to bootstrap end-to-end encryption. After a successful first scan, the iPhone stores a trusted Mac record in Keychain and the bridge persists its trusted phone identity locally on the Mac.
-- On macOS, the bridge can keep running as a lightweight `launchd` service, so the phone can resolve the Mac's current live relay session and reconnect without scanning a new QR every time.
+- The pairing QR carries the connection URL, the session ID, and the bridge identity key used to bootstrap end-to-end encryption. After a successful first scan, the iPhone stores a trusted host record in Keychain and the bridge persists its trusted phone identity locally on the host.
+- On macOS and Linux, the bridge can keep running as a lightweight background service, so the phone can resolve the current live relay session and reconnect without scanning a new QR every time.
 - The QR is still the recovery path when trust changes, the bridge identity rotates, or the relay cannot resolve the current live session.
 - The bridge state lives canonically in `~/.remodex/device-state.json` with local-only permissions. On macOS the bridge also mirrors that state to Keychain as best-effort backup/migration data, and recent builds auto-repair unreadable local state on startup instead of requiring manual cleanup.
 - The CLI no longer prints the connection URL in plain text below the QR.
@@ -354,14 +362,14 @@ On the relay/VPS side, keep push disabled until you actually want it. The HTTP p
 
 ## Security and Privacy
 
-Remodex now uses an authenticated end-to-end encrypted channel between the paired iPhone and the bridge running on your Mac. The transport layer still carries the WebSocket traffic, but it does not get the plaintext contents of prompts, tool calls, Codex responses, git output, or workspace RPC payloads once the secure session is established.
+Remodex now uses an authenticated end-to-end encrypted channel between the paired iPhone and the bridge running on your paired host. The transport layer still carries the WebSocket traffic, but it does not get the plaintext contents of prompts, tool calls, Codex responses, git output, or workspace RPC payloads once the secure session is established.
 
 The secure channel is built in these steps:
 
 1. The bridge generates and persists a long-term device identity keypair on the Mac.
 2. The pairing QR shares the connection URL, session ID, bridge device ID, bridge identity public key, and a short expiry window.
 3. During pairing, the iPhone and bridge exchange fresh X25519 ephemeral keys and nonces.
-4. The bridge signs the handshake transcript with its Ed25519 identity key, and the iPhone verifies that signature against the public key from the QR code or the previously trusted Mac record.
+4. The bridge signs the handshake transcript with its Ed25519 identity key, and the iPhone verifies that signature against the public key from the QR code or the previously trusted host record.
 5. The iPhone signs a client-auth transcript with its own Ed25519 identity key, and the bridge verifies that before accepting the session.
 6. Both sides derive directional AES-256-GCM keys with HKDF-SHA256 and then wrap application messages in encrypted envelopes with monotonic counters for replay protection.
 
@@ -452,10 +460,10 @@ I'm not actively accepting contributions yet. See [CONTRIBUTING.md](CONTRIBUTING
 Not for Remodex itself. You need Codex CLI set up and working independently.
 
 **Does this work on Linux/Windows?**
-The core bridge client (Codex forwarding + git) works on any OS. Desktop refresh (AppleScript) is macOS-only, and the built-in daemon / trusted auto-reconnect service path is currently macOS-only too.
+The core bridge client (Codex forwarding + git) works on any OS. Linux also has a built-in user `systemd` service path for trusted auto-reconnect. Desktop refresh (AppleScript) is macOS-only, and Windows still uses the foreground bridge unless you provide your own service wrapper.
 
 **What happens if I close the terminal?**
-On macOS, the bridge can keep running in the background through `launchd`, so closing the terminal does not stop the trusted reconnect path. On other OSes, the foreground bridge stops when the terminal stops.
+On macOS, the bridge can keep running in the background through `launchd`. On Linux, it can keep running through user `systemd`. On other OSes, the foreground bridge stops when the terminal stops.
 
 **How do I force a fresh QR pairing?**
 Run `remodex reset-pairing`, then start the bridge again with `remodex up`. You should only need this when you intentionally want to replace the paired iPhone or wipe the remembered pairing.
@@ -473,10 +481,10 @@ No. The phone session is live, but the `Codex.app` GUI is not a true live mirror
 Yes. That is the intended forking path. The transport and push-service code are in [`relay/`](relay/); point `REMODEX_RELAY` at the instance you run.
 
 **Can I use Tailscale?**
-Yes. It is the recommended private-network option for self-hosting on iPhone. Run your relay somewhere reachable over Tailscale, set `REMODEX_RELAY` to that relay URL, pair once with QR, then let the app reconnect to the trusted Mac through the same relay.
+Yes. It is the recommended private-network option for self-hosting on iPhone. Run your relay somewhere reachable over Tailscale, set `REMODEX_RELAY` to that relay URL, pair once with QR, then let the app reconnect to the trusted host through the same relay.
 
 **Is the transport layer safe for sensitive work?**
-It is much stronger than a plain text proxy: traffic can be protected in transit with TLS, application payloads are end-to-end encrypted after the secure handshake, and all Codex execution still happens on your Mac. The transport can still observe connection metadata and handshake control messages, so the tightest trust model is to run it yourself.
+It is much stronger than a plain text proxy: traffic can be protected in transit with TLS, application payloads are end-to-end encrypted after the secure handshake, and all Codex execution still happens on your paired host. The transport can still observe connection metadata and handshake control messages, so the tightest trust model is to run it yourself.
 
 ## License
 

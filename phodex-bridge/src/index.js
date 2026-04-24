@@ -18,17 +18,33 @@ const {
   startMacOSBridgeService,
   stopMacOSBridgeService,
 } = require("./macos-launch-agent");
+const {
+  getLinuxBridgeServiceStatus,
+  printLinuxBridgePairingQr,
+  printLinuxBridgeServiceStatus,
+  resetLinuxBridgePairing,
+  runLinuxBridgeService,
+  startLinuxBridgeService,
+  stopLinuxBridgeService,
+} = require("./linux-systemd-service");
 
 module.exports = {
+  getLinuxBridgeServiceStatus,
   getMacOSBridgeServiceStatus,
+  printLinuxBridgePairingQr,
+  printLinuxBridgeServiceStatus,
   printMacOSBridgePairingQr,
   printMacOSBridgeServiceStatus,
   readBridgeConfig,
   readBridgeDeviceState,
+  resetLinuxBridgePairing,
   resetMacOSBridgePairing,
   startBridge,
+  runLinuxBridgeService,
   runMacOSBridgeService,
+  startLinuxBridgeService,
   startMacOSBridgeService,
+  stopLinuxBridgeService,
   stopMacOSBridgeService,
   resetBridgePairing: resetBridgeDeviceState,
   openLastActiveThread,

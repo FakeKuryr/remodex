@@ -8,7 +8,7 @@ If you cloned Remodex from GitHub, the intended path is local-first usage or sel
 
 The public repository includes:
 
-- the bridge that runs on your Mac
+- the bridge that runs on your Mac or Linux host
 - the iOS app source code
 - the public relay code
 - local pairing and self-hosting documentation
@@ -27,7 +27,7 @@ The public repository does not include:
 
 If you are running from source, assume you must provide your own relay setup.
 
-The public repo now also includes the trusted-Mac reconnect flow, but the built-in background daemon for that flow is currently macOS-only.
+The public repo now also includes the trusted reconnect flow. The built-in background daemon for that flow supports macOS through `launchd` and Linux through user `systemd`.
 
 ## The Self-Hosting Path
 
@@ -38,12 +38,12 @@ If you use the public repo, you should expect one of these flows:
 
 That means:
 
-- Codex still runs on your Mac
-- git commands still run on your Mac
+- Codex still runs on your host
+- git commands still run on your host
 - the iPhone is still a paired remote client
 - the relay is only the transport layer
 - the first QR scan bootstraps trust
-- later reconnects can reuse that trusted Mac over the same relay
+- later reconnects can reuse that trusted macOS/Linux bridge over the same relay
 
 For most GitHub users, the easiest first step is:
 
@@ -98,6 +98,6 @@ If you cloned Remodex from GitHub:
 - do not expect a private hosted relay to be built in
 - use `./run-local-remodex.sh` for local testing
 - use `REMODEX_RELAY` for your own VPS or hosted relay
-- use QR once to trust the Mac, then let reconnect reuse that trust
-- remember that the built-in daemon/background service path is currently macOS-only
+- use QR once to trust the host, then let reconnect reuse that trust
+- remember that the built-in daemon/background service path is currently macOS and Linux only
 - treat the public repo as the self-hostable version of the project

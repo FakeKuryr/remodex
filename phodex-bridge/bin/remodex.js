@@ -6,14 +6,21 @@
 // Depends on: ../src
 
 const {
+  getLinuxBridgeServiceStatus,
   getMacOSBridgeServiceStatus,
+  printLinuxBridgePairingQr,
+  printLinuxBridgeServiceStatus,
   printMacOSBridgePairingQr,
   printMacOSBridgeServiceStatus,
   readBridgeConfig,
+  resetLinuxBridgePairing,
   resetMacOSBridgePairing,
+  runLinuxBridgeService,
   runMacOSBridgeService,
   startBridge,
+  startLinuxBridgeService,
   startMacOSBridgeService,
+  stopLinuxBridgeService,
   stopMacOSBridgeService,
   resetBridgePairing,
   openLastActiveThread,
@@ -22,14 +29,21 @@ const {
 const { version } = require("../package.json");
 
 const defaultDeps = {
+  getLinuxBridgeServiceStatus,
   getMacOSBridgeServiceStatus,
+  printLinuxBridgePairingQr,
+  printLinuxBridgeServiceStatus,
   printMacOSBridgePairingQr,
   printMacOSBridgeServiceStatus,
   readBridgeConfig,
+  resetLinuxBridgePairing,
   resetMacOSBridgePairing,
+  runLinuxBridgeService,
   runMacOSBridgeService,
   startBridge,
+  startLinuxBridgeService,
   startMacOSBridgeService,
+  stopLinuxBridgeService,
   stopMacOSBridgeService,
   resetBridgePairing,
   openLastActiveThread,
@@ -67,6 +81,27 @@ async function main({
       return;
     }
 
+    if (platform === "linux") {
+      try {
+        const result = await deps.startLinuxBridgeService({
+          waitForPairing: true,
+        });
+        deps.printLinuxBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+      } catch (error) {
+        if (!isLinuxSystemdUnavailableError(error)) {
+          throw error;
+        }
+        const warn = typeof consoleImpl.warn === "function"
+          ? consoleImpl.warn.bind(consoleImpl)
+          : consoleImpl.log.bind(consoleImpl);
+        warn("[remodex] Linux user systemd is unavailable; running the bridge in the foreground.");
+        deps.startBridge();
+      }
+      return;
+    }
+
     deps.startBridge();
     return;
   }
@@ -77,28 +112,47 @@ async function main({
   }
 
   if (command === "run-service") {
-    deps.runMacOSBridgeService();
+    if (platform === "darwin") {
+      deps.runMacOSBridgeService();
+      return;
+    }
+    if (platform === "linux") {
+      deps.runLinuxBridgeService();
+      return;
+    }
+    assertServiceCommand(command, {
+      platform,
+      consoleImpl,
+      exitImpl,
+    });
     return;
   }
 
   if (command === "start") {
-    assertMacOSCommand(command, {
+    assertServiceCommand(command, {
       platform,
       consoleImpl,
       exitImpl,
     });
     deps.readBridgeConfig();
-    const result = await deps.startMacOSBridgeService({
-      waitForPairing: false,
-    });
+    const result = platform === "linux"
+      ? await deps.startLinuxBridgeService({
+        waitForPairing: false,
+      })
+      : await deps.startMacOSBridgeService({
+        waitForPairing: false,
+      });
     emitResult({
       payload: {
         ok: true,
         currentVersion: version,
         plistPath: result?.plistPath,
+        unitPath: result?.unitPath,
         pairingSession: result?.pairingSession,
       },
-      message: "[remodex] macOS bridge service is running.",
+      message: platform === "linux"
+        ? "[remodex] Linux bridge service is running."
+        : "[remodex] macOS bridge service is running.",
       jsonOutput,
       consoleImpl,
     });
@@ -106,23 +160,30 @@ async function main({
   }
 
   if (command === "restart") {
-    assertMacOSCommand(command, {
+    assertServiceCommand(command, {
       platform,
       consoleImpl,
       exitImpl,
     });
     deps.readBridgeConfig();
-    const result = await deps.startMacOSBridgeService({
-      waitForPairing: false,
-    });
+    const result = platform === "linux"
+      ? await deps.startLinuxBridgeService({
+        waitForPairing: false,
+      })
+      : await deps.startMacOSBridgeService({
+        waitForPairing: false,
+      });
     emitResult({
       payload: {
         ok: true,
         currentVersion: version,
         plistPath: result?.plistPath,
+        unitPath: result?.unitPath,
         pairingSession: result?.pairingSession,
       },
-      message: "[remodex] macOS bridge service restarted.",
+      message: platform === "linux"
+        ? "[remodex] Linux bridge service restarted."
+        : "[remodex] macOS bridge service restarted.",
       jsonOutput,
       consoleImpl,
     });
@@ -130,18 +191,24 @@ async function main({
   }
 
   if (command === "stop") {
-    assertMacOSCommand(command, {
+    assertServiceCommand(command, {
       platform,
       consoleImpl,
       exitImpl,
     });
-    deps.stopMacOSBridgeService();
+    if (platform === "linux") {
+      deps.stopLinuxBridgeService();
+    } else {
+      deps.stopMacOSBridgeService();
+    }
     emitResult({
       payload: {
         ok: true,
         currentVersion: version,
       },
-      message: "[remodex] macOS bridge service stopped.",
+      message: platform === "linux"
+        ? "[remodex] Linux bridge service stopped."
+        : "[remodex] macOS bridge service stopped.",
       jsonOutput,
       consoleImpl,
     });
@@ -149,19 +216,25 @@ async function main({
   }
 
   if (command === "status") {
-    assertMacOSCommand(command, {
+    assertServiceCommand(command, {
       platform,
       consoleImpl,
       exitImpl,
     });
     if (jsonOutput) {
       emitJson({
-        ...deps.getMacOSBridgeServiceStatus(),
+        ...(platform === "linux"
+          ? deps.getLinuxBridgeServiceStatus()
+          : deps.getMacOSBridgeServiceStatus()),
         currentVersion: version,
       });
       return;
     }
-    deps.printMacOSBridgeServiceStatus();
+    if (platform === "linux") {
+      deps.printLinuxBridgeServiceStatus();
+    } else {
+      deps.printMacOSBridgeServiceStatus();
+    }
     return;
   }
 
@@ -176,6 +249,18 @@ async function main({
             platform: "darwin",
           },
           message: "[remodex] Stopped the macOS bridge service and cleared the saved pairing state. Run `remodex up` to pair again.",
+          jsonOutput,
+          consoleImpl,
+        });
+      } else if (platform === "linux") {
+        deps.resetLinuxBridgePairing();
+        emitResult({
+          payload: {
+            ok: true,
+            currentVersion: version,
+            platform: "linux",
+          },
+          message: "[remodex] Stopped the Linux bridge service and cleared the saved pairing state. Run `remodex up` to pair again.",
           jsonOutput,
           consoleImpl,
         });
@@ -291,16 +376,16 @@ function emitJson(payload) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function assertMacOSCommand(name, {
+function assertServiceCommand(name, {
   platform = process.platform,
   consoleImpl = console,
   exitImpl = process.exit,
 } = {}) {
-  if (platform === "darwin") {
+  if (platform === "darwin" || platform === "linux") {
     return;
   }
 
-  consoleImpl.error(`[remodex] \`${name}\` is only available on macOS. Use \`remodex up\` or \`remodex run\` for the foreground bridge on this OS.`);
+  consoleImpl.error(`[remodex] \`${name}\` is only available on macOS or Linux. Use \`remodex up\` or \`remodex run\` for the foreground bridge on this OS.`);
   exitImpl(1);
 }
 
@@ -308,7 +393,32 @@ function isVersionCommand(value) {
   return value === "-v" || value === "--v" || value === "-V" || value === "--version" || value === "version";
 }
 
+function isLinuxSystemdUnavailableError(error) {
+  if (!error) {
+    return false;
+  }
+
+  const stderr = Buffer.isBuffer(error.stderr)
+    ? error.stderr.toString("utf8")
+    : String(error.stderr || "");
+  const message = String(error.message || "");
+  const combined = `${message}\n${stderr}`.toLowerCase();
+
+  return (
+    error.code === "ENOENT" && combined.includes("systemctl")
+  ) || (
+    combined.includes("systemctl")
+    && (
+      combined.includes("failed to connect to bus")
+      || combined.includes("no medium found")
+      || combined.includes("system has not been booted with systemd")
+      || combined.includes("not booted with systemd")
+    )
+  );
+}
+
 module.exports = {
+  isLinuxSystemdUnavailableError,
   isVersionCommand,
   main,
 };

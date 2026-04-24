@@ -1,0 +1,32 @@
+[tools]
+node = "20"
+
+[tasks.bridge-deps]
+description = "Install bridge dependencies from lockfile without running package lifecycle scripts"
+dir = "phodex-bridge"
+run = "npm ci --ignore-scripts"
+
+[tasks.bridge-test]
+description = "Run the Remodex bridge test suite"
+dir = "phodex-bridge"
+run = "npm test"
+
+[tasks.bridge-up]
+description = "Start the Remodex bridge using REMODEX_RELAY from the environment"
+dir = "phodex-bridge"
+run = "node ./bin/remodex.js up"
+
+[tasks.bridge-run]
+description = "Run the Remodex bridge in the foreground using REMODEX_RELAY from the environment"
+dir = "phodex-bridge"
+run = "node ./bin/remodex.js run"
+
+[tasks.relay-deps]
+description = "Install relay dependencies from lockfile without running package lifecycle scripts"
+dir = "relay"
+run = "npm ci --ignore-scripts"
+
+[tasks.relay-start]
+description = "Start the local Remodex relay"
+dir = "relay"
+run = "npm start"

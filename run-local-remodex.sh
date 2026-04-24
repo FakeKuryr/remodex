@@ -42,7 +42,7 @@ Options:
 Defaults:
   --bind-host           0.0.0.0
   --port                9000
-  --hostname            macOS LocalHostName.local, then hostname, then localhost
+  --hostname            macOS LocalHostName.local when available, then hostname, then localhost
 EOF
 }
 
@@ -162,7 +162,7 @@ ensure_prerequisites() {
 }
 
 # Validates the advertised host before boot so the QR cannot point at another machine by mistake.
-ensure_hostname_belongs_to_this_mac() {
+ensure_hostname_belongs_to_this_host() {
   node -e '
 const dns = require("node:dns");
 const os = require("node:os");
@@ -186,7 +186,7 @@ dns.lookup(hostname, { all: true }, (error, records) => {
   const isLocal = records.some((record) => localAddresses.has(record.address));
   process.exit(isLocal ? 0 : 1);
 });
-' "${RELAY_HOSTNAME}" || die "The advertised hostname '${RELAY_HOSTNAME}' does not resolve back to this Mac.
+' "${RELAY_HOSTNAME}" || die "The advertised hostname '${RELAY_HOSTNAME}' does not resolve back to this host.
 Pass --hostname with a LAN hostname or IP address that points to this machine so the iPhone can connect."
 }
 
@@ -319,7 +319,7 @@ RELAY_BRIDGE_HOST="$(healthcheck_host)"
 ensure_prerequisites
 ensure_package_dependencies "${BRIDGE_DIR}"
 ensure_package_dependencies "${RELAY_DIR}"
-ensure_hostname_belongs_to_this_mac
+ensure_hostname_belongs_to_this_host
 ensure_port_available
 print_summary
 start_embedded_relay
