@@ -250,7 +250,7 @@ Type=simple
 ExecStart=${quoteSystemdCommandArg(nodePath)} ${quoteSystemdCommandArg(cliPath)} run-service
 Restart=always
 RestartSec=2
-WorkingDirectory=${quoteSystemdValue(homeDir)}
+WorkingDirectory=${homeDir}
 Environment=${quoteSystemdValue(`HOME=${homeDir}`)} ${quoteSystemdValue(`PATH=${pathEnv}`)} ${quoteSystemdValue(`REMODEX_DEVICE_STATE_DIR=${stateDir}`)}
 StandardOutput=append:${stdoutLogPath}
 StandardError=append:${stderrLogPath}

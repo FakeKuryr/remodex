@@ -25,6 +25,7 @@ test("buildSystemdUserUnit runs remodex service entrypoint with persistent state
   assert.match(unit, /Description=Remodex bridge/);
   assert.match(unit, /ExecStart="\/usr\/bin\/node" "\/opt\/remodex\/bin\/remodex.js" run-service/);
   assert.match(unit, /Restart=always/);
+  assert.match(unit, /WorkingDirectory=\/home\/alice/);
   assert.match(unit, /Environment="HOME=\/home\/alice" "PATH=\/usr\/local\/bin:\/usr\/bin" "REMODEX_DEVICE_STATE_DIR=\/home\/alice\/.remodex"/);
   assert.match(unit, /StandardOutput=append:\/home\/alice\/.remodex\/logs\/bridge.stdout.log/);
   assert.match(unit, /WantedBy=default.target/);
